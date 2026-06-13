@@ -83,8 +83,10 @@ public class OrderServiceImpl implements OrderServiceApi {
         orderMapper.insertSeckillOrder(seckillOrder);
         logger.debug("将秒杀订单插入 seckill_order 表中");
 
-        // 将秒杀订单概要信息存储于redis中
-        redisService.set(OrderKeyPrefix.SK_ORDER, ":" + user.getUuid() + "_" + goods.getId(), seckillOrder);
+        // 注意: 不再在此处写 Redis 缓存。
+        // createOrder 通过 Dubbo RPC 被 SeckillServiceImpl.seckill() 调用，
+        // 若在事务提交前就写缓存，一旦上层流程失败导致回滚，缓存中将残留脏数据。
+        // 缓存写入由调用方 (seckill) 在所有操作成功后统一完成。
 
         return orderInfo;
     }

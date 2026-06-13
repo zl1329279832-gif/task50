@@ -4,6 +4,7 @@ package com.seckill.dis.goods.service;
 import com.alibaba.fastjson.JSONObject;
 import com.seckill.dis.common.api.cache.RedisServiceApi;
 import com.seckill.dis.common.api.cache.vo.GoodsKeyPrefix;
+import com.seckill.dis.common.api.cache.vo.OrderKeyPrefix;
 import com.seckill.dis.common.api.cache.vo.SkKeyPrefix;
 import com.seckill.dis.common.api.goods.GoodsServiceApi;
 import com.seckill.dis.common.api.goods.vo.GoodsVo;
@@ -66,9 +67,28 @@ public class SeckillServiceImpl implements SeckillServiceApi {
         }
         // 2. 生成订单；向 order_info 表和 seckill_order 表中写入订单信息
         OrderInfo order = orderService.createOrder(user, goods);
-        // 3. 更新缓存中的库存信息
-        GoodsVo good = goodsService.getGoodsVoByGoodsId(goods.getId());
-        redisService.set(GoodsKeyPrefix.GOODS_STOCK, "" + good.getId(), good.getStockCount());
+
+        // 3. 订单创建成功后，将秒杀订单缓存写入 Redis
+        //    （原先在 OrderServiceImpl.createOrder 内部写入，存在事务未提交就写缓存的风险）
+        if (order != null) {
+            SeckillOrder seckillOrder = new SeckillOrder();
+            seckillOrder.setUserId(user.getUuid());
+            seckillOrder.setGoodsId(goods.getId());
+            seckillOrder.setOrderId(order.getId());
+            redisService.set(OrderKeyPrefix.SK_ORDER,
+                    ":" + user.getUuid() + "_" + goods.getId(), seckillOrder);
+        }
+
+        // 4. 从 DB 刷新 Redis 库存缓存，保证与数据库一致
+        GoodsVo refreshed = goodsService.getGoodsVoByGoodsId(goods.getId());
+        if (refreshed != null) {
+            redisService.set(GoodsKeyPrefix.GOODS_STOCK,
+                    "" + refreshed.getId(), refreshed.getStockCount());
+            // 库存恢复 > 0 时清除"售罄"标记，避免 localOverMap / Redis 永久标记
+            if (refreshed.getStockCount() > 0) {
+                redisService.delete(SkKeyPrefix.GOODS_SK_OVER, "" + refreshed.getId());
+            }
+        }
 
         return order;
     }
@@ -87,25 +107,44 @@ public class SeckillServiceImpl implements SeckillServiceApi {
     }
 
     /**
+     * 标记该用户对该商品的秒杀请求已被 MQ 消费者处理完毕（无论成功或失败）。
+     * 配合 getSeckillResult 使用：当消息已消费但未生成订单时返回 -1 而非永远排队。
+     */
+    public void setSeckillProcessed(Long userId, long goodsId) {
+        redisService.set(SkKeyPrefix.SK_PROCESSED, "" + userId + "_" + goodsId, true);
+    }
+
+    private boolean isSeckillProcessed(Long userId, long goodsId) {
+        return redisService.exists(SkKeyPrefix.SK_PROCESSED, "" + userId + "_" + goodsId);
+    }
+
+    /**
      * 获取秒杀结果
      *
      * @param userId
      * @param goodsId
-     * @return
+     * @return orderId 成功, -1 失败/秒杀完毕, 0 排队中
      */
     public long getSeckillResult(Long userId, long goodsId) {
 
+        // 1. 先查订单（Redis 缓存 -> DB）
         SeckillOrder order = orderService.getSeckillOrderByUserIdAndGoodsId(userId, goodsId);
-        if (order != null) {//秒杀成功
-            return order.getOrderId();
-        } else {
-            boolean isOver = getGoodsOver(goodsId);
-            if (isOver) {
-                return -1;
-            } else {
-                return 0;
-            }
+        if (order != null) {
+            return order.getOrderId(); // 秒杀成功
         }
+
+        // 2. 没有订单 —— 判断是"消息尚在队列"还是"已消费但失败"
+        //    若消费者已处理过此 user+goods 但没有生成订单，说明抢购失败
+        if (isSeckillProcessed(userId, goodsId)) {
+            return -1;
+        }
+
+        // 3. 全局售罄标记
+        if (getGoodsOver(goodsId)) {
+            return -1;
+        }
+
+        return 0; // 仍在排队
     }
 
     /**

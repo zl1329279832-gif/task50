@@ -38,4 +38,12 @@ public interface SeckillServiceApi {
      * @return
      */
     long getSeckillResult(Long userId, long goodsId);
+
+    /**
+     * 标记用户的秒杀请求已被 MQ 消费者处理完毕
+     *
+     * @param userId  用户 ID
+     * @param goodsId 商品 ID
+     */
+    void setSeckillProcessed(Long userId, long goodsId);
 }

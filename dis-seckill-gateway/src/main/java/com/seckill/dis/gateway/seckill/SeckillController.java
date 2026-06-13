@@ -1,5 +1,6 @@
 package com.seckill.dis.gateway.seckill;
 
+import com.seckill.dis.common.api.cache.DLockApi;
 import com.seckill.dis.common.api.cache.RedisServiceApi;
 import com.seckill.dis.common.api.cache.vo.GoodsKeyPrefix;
 import com.seckill.dis.common.api.cache.vo.OrderKeyPrefix;
@@ -30,9 +31,9 @@ import org.springframework.web.bind.annotation.*;
 import javax.imageio.ImageIO;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -61,10 +62,17 @@ public class SeckillController implements InitializingBean {
     @Reference(interfaceClass = MqProviderApi.class)
     MqProviderApi sender;
 
+    @Reference(interfaceClass = DLockApi.class)
+    DLockApi dLock;
+
+    /** 秒杀请求分布式锁过期时间: 5 秒 */
+    private static final int SK_LOCK_EXPIRE_MS = 5000;
+
     /**
-     * 用于内存标记，标记库存是否为空，从而减少对redis的访问
+     * 用于内存标记，标记库存是否为空，从而减少对redis的访问。
+     * 使用 ConcurrentHashMap 保证线程安全（原 HashMap 在并发下不安全）。
      */
-    private Map<Long, Boolean> localOverMap = new HashMap<>();
+    private Map<Long, Boolean> localOverMap = new ConcurrentHashMap<>();
 
     /**
      * 获取秒杀接口地址
@@ -139,45 +147,64 @@ public class SeckillController implements InitializingBean {
         if (!check)
             return Result.error(CodeMsg.REQUEST_ILLEGAL);// 请求非法
 
-        // 通过内存标记，减少对redis的访问，秒杀未结束才继续访问redis
-        Boolean over = localOverMap.get(goodsId);
-        if (over)
-            return Result.error(CodeMsg.SECKILL_OVER);
-
-        // 预减库存，同时在库存为0时标记该商品已经结束秒杀
-        Long stock = redisService.decr(GoodsKeyPrefix.GOODS_STOCK, "" + goodsId);
-        if (stock < 0) {
-            localOverMap.put(goodsId, true);// 秒杀结束。标记该商品已经秒杀结束
-            // 检查商品是否允许候补抢购
-            GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
-            if (goods != null && goods.isAllowWaitlist()) {
-                return Result.error(CodeMsg.SECKILL_OVER_WAITLIST);
-            }
-            return Result.error(CodeMsg.SECKILL_OVER);
-        }
-
-        // 判断是否重复秒杀
-        // 从redis中取缓存，减少数据库的访问
-        SeckillOrder order = redisService.get(OrderKeyPrefix.SK_ORDER, ":" + user.getUuid() + "_" + goodsId, SeckillOrder.class);
-        // 如果缓存中不存该数据，则从数据库中取
-        if (order == null) {
-            order = orderService.getSeckillOrderByUserIdAndGoodsId(user.getUuid(), goodsId);
-        }
-
-        if (order != null) {
+        // ── 分布式锁: 同一 user+goods 同一时刻只允许一个请求进入，防止重复发 MQ ──
+        String lockKey = "sk_lock:" + user.getUuid() + "_" + goodsId;
+        String lockValue = UUIDUtil.uuid();
+        boolean locked = dLock.lock(lockKey, lockValue, SK_LOCK_EXPIRE_MS);
+        if (!locked) {
             return Result.error(CodeMsg.REPEATE_SECKILL);
         }
 
-        // 商品有库存且用户为秒杀商品，则将秒杀请求放入MQ
-        SkMessage message = new SkMessage();
-        message.setUser(user);
-        message.setGoodsId(goodsId);
+        try {
+            // 通过内存标记，减少对redis的访问，秒杀未结束才继续访问redis
+            // 使用 Boolean 包装类避免 NPE（服务重启后 map 中可能无此 key）
+            Boolean over = localOverMap.get(goodsId);
+            if (over != null && over)
+                return Result.error(CodeMsg.SECKILL_OVER);
 
-        // 放入MQ(对秒杀请求异步处理，直接返回)
-        sender.sendSkMessage(message);
+            // 同时检查 Redis 中的售罄标记（服务重启后 localOverMap 为空，需此兜底）
+            if (redisService.exists(SkKeyPrefix.GOODS_SK_OVER, "" + goodsId)) {
+                localOverMap.put(goodsId, true);
+                return Result.error(CodeMsg.SECKILL_OVER);
+            }
 
-        // 排队中
-        return Result.success(0);
+            // 预减库存，同时在库存为0时标记该商品已经结束秒杀
+            Long stock = redisService.decr(GoodsKeyPrefix.GOODS_STOCK, "" + goodsId);
+            if (stock < 0) {
+                localOverMap.put(goodsId, true);// 秒杀结束。标记该商品已经秒杀结束
+                // 检查商品是否允许候补抢购
+                GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
+                if (goods != null && goods.isAllowWaitlist()) {
+                    return Result.error(CodeMsg.SECKILL_OVER_WAITLIST);
+                }
+                return Result.error(CodeMsg.SECKILL_OVER);
+            }
+
+            // 判断是否重复秒杀
+            // 从redis中取缓存，减少数据库的访问
+            SeckillOrder order = redisService.get(OrderKeyPrefix.SK_ORDER, ":" + user.getUuid() + "_" + goodsId, SeckillOrder.class);
+            // 如果缓存中不存该数据，则从数据库中取
+            if (order == null) {
+                order = orderService.getSeckillOrderByUserIdAndGoodsId(user.getUuid(), goodsId);
+            }
+
+            if (order != null) {
+                return Result.error(CodeMsg.REPEATE_SECKILL);
+            }
+
+            // 商品有库存且用户为秒杀商品，则将秒杀请求放入MQ
+            SkMessage message = new SkMessage();
+            message.setUser(user);
+            message.setGoodsId(goodsId);
+
+            // 放入MQ(对秒杀请求异步处理，直接返回)
+            sender.sendSkMessage(message);
+
+            // 排队中
+            return Result.success(0);
+        } finally {
+            dLock.unlock(lockKey, lockValue);
+        }
     }
 
     /**
@@ -307,6 +334,7 @@ public class SeckillController implements InitializingBean {
 
     /**
      * 服务器程序启动的时候加载商品列表信息
+     * 同时从 Redis 恢复售罄标记（localOverMap），保证服务重启后缓存一致
      */
     @Override
     public void afterPropertiesSet() {
@@ -319,8 +347,10 @@ public class SeckillController implements InitializingBean {
         // 将商品的库存信息存储在redis中
         for (GoodsVo good : goods) {
             redisService.set(GoodsKeyPrefix.GOODS_STOCK, "" + good.getId(), good.getStockCount());
-            // 在系统启动时，标记库存不为空
-            localOverMap.put(good.getId(), false);
+
+            // 从 Redis 恢复售罄标记: 若 GOODS_SK_OVER 已存在则 localOverMap 直接标记 true
+            boolean isOver = redisService.exists(SkKeyPrefix.GOODS_SK_OVER, "" + good.getId());
+            localOverMap.put(good.getId(), isOver);
         }
     }
 }

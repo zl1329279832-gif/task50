@@ -32,4 +32,11 @@ public class SkKeyPrefix extends BaseKeyPrefix implements Serializable {
      * 验证码5分钟有效
      */
     public static SkKeyPrefix VERIFY_RESULT = new SkKeyPrefix(300, "verifyResult");
+
+    /**
+     * 标记用户的秒杀请求已被 MQ 消费者处理（key: userId_goodsId, value: true）。
+     * 用于区分"消息尚在队列排队"与"消息已消费但未生成订单（失败）"两种情形，
+     * 从而让 getSeckillResult 在失败场景下能够返回 -1 而非永远返回 0。
+     */
+    public static SkKeyPrefix SK_PROCESSED = new SkKeyPrefix("skProcessed");
 }

@@ -1,5 +1,6 @@
 package com.seckill.dis.mq.receiver;
 
+import com.seckill.dis.common.api.cache.DLockApi;
 import com.seckill.dis.common.api.cache.RedisServiceApi;
 import com.seckill.dis.common.api.cache.vo.GoodsKeyPrefix;
 import com.seckill.dis.common.api.cache.vo.OrderKeyPrefix;
@@ -17,6 +18,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 /**
  * MQ消息接收者, 消费者
  * 消费者绑定在队列监听，既可以接收到队列中的消息
@@ -27,6 +30,9 @@ import org.springframework.stereotype.Service;
 public class MqConsumer {
 
     private static Logger logger = LoggerFactory.getLogger(MqConsumer.class);
+
+    /** 秒杀消费分布式锁过期时间: 10 秒 */
+    private static final int SK_LOCK_EXPIRE_MS = 10000;
 
     @Reference(interfaceClass = GoodsServiceApi.class)
     GoodsServiceApi goodsService;
@@ -40,8 +46,14 @@ public class MqConsumer {
     @Reference(interfaceClass = RedisServiceApi.class)
     RedisServiceApi redisService;
 
+    @Reference(interfaceClass = DLockApi.class)
+    DLockApi dLock;
+
     /**
      * 处理收到的秒杀成功信息（核心业务实现）
+     * <p>
+     * 通过分布式锁保证同一用户同一商品的消息在任意时刻只有一个线程在处理，
+     * 从而防止 MQ 重投或重复消息导致的重复下单。
      *
      * @param message
      */
@@ -49,25 +61,45 @@ public class MqConsumer {
     public void receiveSkInfo(SkMessage message) {
         logger.info("MQ receive a message: " + message);
 
-        // 获取秒杀用户信息与商品id
         UserVo user = message.getUser();
         long goodsId = message.getGoodsId();
 
-        // 获取商品的库存
-        GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
-        Integer stockCount = goods.getStockCount();
-        if (stockCount <= 0) {
-            return;
+        // ── 1. 分布式锁: 同一 user+goods 同一时刻只允许一个消费者处理 ──
+        String lockKey = "sk_consumer:" + user.getUuid() + "_" + goodsId;
+        String lockValue = UUID.randomUUID().toString();
+        boolean locked = dLock.lock(lockKey, lockValue, SK_LOCK_EXPIRE_MS);
+        if (!locked) {
+            // 拿不到锁说明另一线程正在处理同一条消息，抛出异常让 RabbitMQ 重投
+            logger.warn("MQ consumer: could not acquire lock for user={}, goods={}, will retry",
+                    user.getUuid(), goodsId);
+            throw new RuntimeException("Consumer lock not acquired, retry later");
         }
 
-        // 判断是否已经秒杀到了（保证秒杀接口幂等性）
-        SeckillOrder order = this.getSkOrderByUserIdAndGoodsId(user.getUuid(), goodsId);
-        if (order != null) {
-            return;
-        }
+        try {
+            // ── 2. 幂等检查: 是否已有秒杀订单 ──
+            SeckillOrder order = getSkOrderByUserIdAndGoodsId(user.getUuid(), goodsId);
+            if (order != null) {
+                // 已处理过（可能是重投消息），标记 processed 后直接返回
+                seckillService.setSeckillProcessed(user.getUuid(), goodsId);
+                return;
+            }
 
-        // 1.减库存 2.写入订单 3.写入秒杀订单
-        seckillService.seckill(user, goods);
+            // ── 3. 库存检查 ──
+            GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
+            if (goods == null || goods.getStockCount() <= 0) {
+                seckillService.setSeckillProcessed(user.getUuid(), goodsId);
+                return;
+            }
+
+            // ── 4. 执行秒杀: 减库存 + 创建订单 ──
+            seckillService.seckill(user, goods);
+
+            // ── 5. 无论成功与否，标记此 user+goods 已被消费者处理 ──
+            seckillService.setSeckillProcessed(user.getUuid(), goodsId);
+
+        } finally {
+            dLock.unlock(lockKey, lockValue);
+        }
     }
 
     /**
