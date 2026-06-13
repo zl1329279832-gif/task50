@@ -19,6 +19,7 @@ public class GoodsVo extends Goods implements Serializable {
     private Integer stockCount;
     private Date startDate;
     private Date endDate;
+    private Boolean allowWaitlist;
 
     public Double getSeckillPrice() {
         return seckillPrice;
@@ -50,5 +51,21 @@ public class GoodsVo extends Goods implements Serializable {
 
     public void setEndDate(Date endDate) {
         this.endDate = endDate;
+    }
+
+    public Boolean getAllowWaitlist() {
+        return allowWaitlist;
+    }
+
+    public void setAllowWaitlist(Boolean allowWaitlist) {
+        this.allowWaitlist = allowWaitlist;
+    }
+
+    public void setAllowWaitlist(boolean allowWaitlist) {
+        this.allowWaitlist = allowWaitlist;
+    }
+
+    public boolean isAllowWaitlist() {
+        return allowWaitlist != null && allowWaitlist;
     }
 }

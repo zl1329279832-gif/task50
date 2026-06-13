@@ -5,10 +5,12 @@ import com.seckill.dis.common.api.cache.vo.GoodsKeyPrefix;
 import com.seckill.dis.common.api.cache.vo.OrderKeyPrefix;
 import com.seckill.dis.common.api.goods.GoodsServiceApi;
 import com.seckill.dis.common.api.goods.vo.GoodsVo;
+import com.seckill.dis.common.api.mq.vo.ReplenishMessage;
 import com.seckill.dis.common.api.mq.vo.SkMessage;
 import com.seckill.dis.common.api.order.OrderServiceApi;
 import com.seckill.dis.common.api.seckill.SeckillServiceApi;
 import com.seckill.dis.common.api.user.vo.UserVo;
+import com.seckill.dis.common.api.waitlist.WaitlistServiceApi;
 import com.seckill.dis.common.domain.SeckillOrder;
 import com.seckill.dis.mq.config.MQConfig;
 import org.apache.dubbo.config.annotation.Reference;
@@ -39,6 +41,9 @@ public class MqConsumer {
 
     @Reference(interfaceClass = RedisServiceApi.class)
     RedisServiceApi redisService;
+
+    @Reference(interfaceClass = WaitlistServiceApi.class)
+    WaitlistServiceApi waitlistService;
 
     /**
      * 处理收到的秒杀成功信息（核心业务实现）
@@ -88,5 +93,17 @@ public class MqConsumer {
             return seckillOrder;
         }
         return orderService.getSeckillOrderByUserIdAndGoodsId(userId, goodsId);
+    }
+
+    /**
+     * 处理补库存消息，异步唤醒候补队列并按排位生成订单
+     *
+     * @param message
+     */
+    @RabbitListener(queues = MQConfig.REPLENISH_QUEUE)
+    public void receiveReplenishInfo(ReplenishMessage message) {
+        logger.info("MQ receive replenish message: goodsId=" + message.getGoodsId() + ", quantity=" + message.getQuantity());
+        int converted = waitlistService.processReplenishment(message.getGoodsId(), message.getQuantity());
+        logger.info("Replenish completed: goodsId=" + message.getGoodsId() + ", converted=" + converted);
     }
 }

@@ -67,4 +67,48 @@ public interface RedisServiceApi {
      * @return
      */
     boolean delete(KeyPrefix prefix, String key);
+
+    // ─────────── Sorted Set 操作 ───────────
+
+    /**
+     * 获取有序集合中成员的分数
+     */
+    Double zscore(KeyPrefix prefix, String key, String member);
+
+    /**
+     * 向有序集合中添加成员
+     */
+    boolean zadd(KeyPrefix prefix, String key, double score, String member);
+
+    /**
+     * 获取有序集合的元素数量
+     */
+    long zcard(KeyPrefix prefix, String key);
+
+    /**
+     * 获取有序集合中成员的排名（从0开始）
+     */
+    Long zrank(KeyPrefix prefix, String key, String member);
+
+    /**
+     * 从有序集合中移除成员
+     */
+    boolean zrem(KeyPrefix prefix, String key, String member);
+
+    // ─────────── Hash 操作 ───────────
+
+    /**
+     * 设置哈希表中字段的值
+     */
+    boolean hset(KeyPrefix prefix, String key, String field, String value);
+
+    /**
+     * 获取哈希表中字段的值
+     */
+    String hget(KeyPrefix prefix, String key, String field);
+
+    /**
+     * 删除哈希表中的字段
+     */
+    boolean hdel(KeyPrefix prefix, String key, String field);
 }

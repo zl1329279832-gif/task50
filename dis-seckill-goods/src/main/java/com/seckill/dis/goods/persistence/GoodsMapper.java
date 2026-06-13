@@ -22,7 +22,7 @@ public interface GoodsMapper {
      *
      * @return
      */
-    @Select("SELECT g.*, mg.stock_count, mg.start_date, mg.end_date, mg.seckill_price FROM seckill_goods mg LEFT JOIN goods g ON mg.goods_id=g.id")
+    @Select("SELECT g.*, mg.stock_count, mg.start_date, mg.end_date, mg.seckill_price, mg.allow_waitlist FROM seckill_goods mg LEFT JOIN goods g ON mg.goods_id=g.id")
     List<GoodsVo> listGoodsVo();
 
     /**
@@ -31,7 +31,7 @@ public interface GoodsMapper {
      * @param goodsId
      * @return
      */
-    @Select("SELECT g.*, mg.stock_count, mg.start_date, mg.end_date, mg.seckill_price FROM seckill_goods mg LEFT JOIN goods g ON mg.goods_id=g.id where g.id = #{goodsId}")
+    @Select("SELECT g.*, mg.stock_count, mg.start_date, mg.end_date, mg.seckill_price, mg.allow_waitlist FROM seckill_goods mg LEFT JOIN goods g ON mg.goods_id=g.id where g.id = #{goodsId}")
     GoodsVo getGoodsVoByGoodsId(@Param("goodsId") Long goodsId);
 
     /**

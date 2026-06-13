@@ -21,6 +21,11 @@ public class MQConfig {
     public static final String SECKILL_QUEUE = "seckill.queue";
 
     /**
+     * 补库存消息队列名
+     */
+    public static final String REPLENISH_QUEUE = "replenish.queue";
+
+    /**
      * 秒杀 routing key, 生产者沿着 routingKey 将消息投递到 exchange 中
      */
     public static final String SK_ROUTING_KEY = "routing.sk";
@@ -34,6 +39,14 @@ public class MQConfig {
     @Bean
     public Queue seckillQueue() {
         return new Queue(SECKILL_QUEUE, true);
+    }
+
+    /**
+     * 生成用于补库存的queue
+     */
+    @Bean
+    public Queue replenishQueue() {
+        return new Queue(REPLENISH_QUEUE, true);
     }
 
     /**

@@ -119,6 +119,111 @@ public class RedisServiceImpl implements RedisServiceApi {
         }
     }
 
+    // ─────────── Sorted Set 操作 ───────────
+
+    @Override
+    public Double zscore(KeyPrefix prefix, String key, String member) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return jedis.zscore(realKey, member);
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public boolean zadd(KeyPrefix prefix, String key, double score, String member) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.zadd(realKey, score, member);
+            return result != null && result > 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public long zcard(KeyPrefix prefix, String key) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.zcard(realKey);
+            return result != null ? result : 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public Long zrank(KeyPrefix prefix, String key, String member) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return jedis.zrank(realKey, member);
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public boolean zrem(KeyPrefix prefix, String key, String member) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.zrem(realKey, member);
+            return result != null && result > 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    // ─────────── Hash 操作 ───────────
+
+    @Override
+    public boolean hset(KeyPrefix prefix, String key, String field, String value) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.hset(realKey, field, value);
+            return result != null && result >= 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public String hget(KeyPrefix prefix, String key, String field) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return jedis.hget(realKey, field);
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public boolean hdel(KeyPrefix prefix, String key, String field) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.hdel(realKey, field);
+            return result != null && result > 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
     /**
      * 将对象转换为对应的json字符串
      *

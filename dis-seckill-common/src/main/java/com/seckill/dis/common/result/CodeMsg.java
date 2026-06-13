@@ -51,6 +51,15 @@ public class CodeMsg implements Serializable {
     public static CodeMsg REPEATE_SECKILL = new CodeMsg(500501, "不能重复秒杀");
     public static CodeMsg SECKILL_FAIL = new CodeMsg(500502, "秒杀失败");
     public static CodeMsg SECKILL_PARM_ILLEGAL = new CodeMsg(500503, "秒杀请求参数异常：%s");
+    public static CodeMsg SECKILL_OVER_WAITLIST_AVAILABLE = new CodeMsg(500504, "商品已秒杀完毕，可加入候补队列");
+
+    /**
+     * 候补模块 5006XX
+     */
+    public static CodeMsg WAITLIST_NOT_ALLOWED = new CodeMsg(500600, "该商品不支持候补");
+    public static CodeMsg WAITLIST_DUPLICATE = new CodeMsg(500601, "不能重复加入候补队列");
+    public static CodeMsg WAITLIST_GOODS_NOT_EXIST = new CodeMsg(500602, "候补商品不存在");
+    public static CodeMsg WAITLIST_HAS_ORDER = new CodeMsg(500603, "已有秒杀订单，无需候补");
 
     /**
      * 构造器定义为private是为了防止controller直接new

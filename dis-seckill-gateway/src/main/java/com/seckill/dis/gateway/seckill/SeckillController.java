@@ -12,7 +12,11 @@ import com.seckill.dis.common.api.order.OrderServiceApi;
 import com.seckill.dis.common.api.seckill.SeckillServiceApi;
 import com.seckill.dis.common.api.seckill.vo.VerifyCodeVo;
 import com.seckill.dis.common.api.user.vo.UserVo;
+import com.seckill.dis.common.api.waitlist.WaitlistServiceApi;
+import com.seckill.dis.common.api.waitlist.vo.WaitlistResultVo;
+import com.seckill.dis.common.api.waitlist.vo.WaitlistStatusVo;
 import com.seckill.dis.common.domain.SeckillOrder;
+import com.seckill.dis.common.exception.GlobalException;
 import com.seckill.dis.common.result.CodeMsg;
 import com.seckill.dis.common.result.Result;
 import com.seckill.dis.common.util.MD5Util;
@@ -60,6 +64,9 @@ public class SeckillController implements InitializingBean {
 
     @Reference(interfaceClass = MqProviderApi.class)
     MqProviderApi sender;
+
+    @Reference(interfaceClass = WaitlistServiceApi.class)
+    WaitlistServiceApi waitlistService;
 
     /**
      * 用于内存标记，标记库存是否为空，从而减少对redis的访问
@@ -141,13 +148,24 @@ public class SeckillController implements InitializingBean {
 
         // 通过内存标记，减少对redis的访问，秒杀未结束才继续访问redis
         Boolean over = localOverMap.get(goodsId);
-        if (over)
+        if (over) {
+            // 检查商品是否允许候补
+            GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
+            if (goods != null && goods.isAllowWaitlist()) {
+                return Result.error(CodeMsg.SECKILL_OVER_WAITLIST_AVAILABLE);
+            }
             return Result.error(CodeMsg.SECKILL_OVER);
+        }
 
         // 预减库存，同时在库存为0时标记该商品已经结束秒杀
         Long stock = redisService.decr(GoodsKeyPrefix.GOODS_STOCK, "" + goodsId);
         if (stock < 0) {
             localOverMap.put(goodsId, true);// 秒杀结束。标记该商品已经秒杀结束
+            // 检查商品是否允许候补
+            GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
+            if (goods != null && goods.isAllowWaitlist()) {
+                return Result.error(CodeMsg.SECKILL_OVER_WAITLIST_AVAILABLE);
+            }
             return Result.error(CodeMsg.SECKILL_OVER);
         }
 
@@ -193,6 +211,54 @@ public class SeckillController implements InitializingBean {
 
         long result = seckillService.getSeckillResult(user.getUuid(), goodsId);
         return Result.success(result);
+    }
+
+    // ─────────── 候补抢购接口 ───────────
+
+    /**
+     * 加入候补队列
+     */
+    @RequestMapping(value = "waitlist/join", method = RequestMethod.POST)
+    @ResponseBody
+    public Result<WaitlistResultVo> joinWaitlist(UserVo user,
+                                                  @RequestParam("goodsId") long goodsId) {
+        if (user == null) {
+            return Result.error(CodeMsg.SESSION_ERROR);
+        }
+        try {
+            WaitlistResultVo vo = waitlistService.joinWaitlist(user, goodsId);
+            return Result.success(vo);
+        } catch (GlobalException e) {
+            return Result.error(e.getCodeMsg());
+        }
+    }
+
+    /**
+     * 查询候补状态
+     */
+    @RequestMapping(value = "waitlist/status", method = RequestMethod.GET)
+    @ResponseBody
+    public Result<WaitlistStatusVo> getWaitlistStatus(UserVo user,
+                                                       @RequestParam("goodsId") long goodsId) {
+        if (user == null) {
+            return Result.error(CodeMsg.SESSION_ERROR);
+        }
+        WaitlistStatusVo vo = waitlistService.getWaitlistStatus(user.getUuid(), goodsId);
+        return Result.success(vo);
+    }
+
+    /**
+     * 取消候补
+     */
+    @RequestMapping(value = "waitlist/cancel", method = RequestMethod.POST)
+    @ResponseBody
+    public Result<Boolean> cancelWaitlist(UserVo user,
+                                          @RequestParam("goodsId") long goodsId) {
+        if (user == null) {
+            return Result.error(CodeMsg.SESSION_ERROR);
+        }
+        boolean success = waitlistService.cancelWaitlist(user, goodsId);
+        return Result.success(success);
     }
 
     /**
