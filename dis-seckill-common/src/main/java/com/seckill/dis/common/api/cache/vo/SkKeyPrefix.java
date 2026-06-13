@@ -32,4 +32,9 @@ public class SkKeyPrefix extends BaseKeyPrefix implements Serializable {
      * 验证码5分钟有效
      */
     public static SkKeyPrefix VERIFY_RESULT = new SkKeyPrefix(300, "verifyResult");
+
+    /**
+     * 秒杀消息已消费标记（per user per goods），用于区分"排队中"和"已处理但无订单"
+     */
+    public static SkKeyPrefix SK_PROCESSED = new SkKeyPrefix("skProcessed");
 }

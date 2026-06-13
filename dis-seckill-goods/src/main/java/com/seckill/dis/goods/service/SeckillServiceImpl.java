@@ -4,6 +4,7 @@ package com.seckill.dis.goods.service;
 import com.alibaba.fastjson.JSONObject;
 import com.seckill.dis.common.api.cache.RedisServiceApi;
 import com.seckill.dis.common.api.cache.vo.GoodsKeyPrefix;
+import com.seckill.dis.common.api.cache.vo.OrderKeyPrefix;
 import com.seckill.dis.common.api.cache.vo.SkKeyPrefix;
 import com.seckill.dis.common.api.goods.GoodsServiceApi;
 import com.seckill.dis.common.api.goods.vo.GoodsVo;
@@ -66,9 +67,19 @@ public class SeckillServiceImpl implements SeckillServiceApi {
         }
         // 2. 生成订单；向 order_info 表和 seckill_order 表中写入订单信息
         OrderInfo order = orderService.createOrder(user, goods);
-        // 3. 更新缓存中的库存信息
+        // 3. 写入秒杀订单缓存，保证 getSeckillResult 能及时查到
+        SeckillOrder seckillOrder = new SeckillOrder();
+        seckillOrder.setUserId(user.getUuid());
+        seckillOrder.setGoodsId(goods.getId());
+        seckillOrder.setOrderId(order.getId());
+        redisService.set(OrderKeyPrefix.SK_ORDER, ":" + user.getUuid() + "_" + goods.getId(), seckillOrder);
+        // 4. 更新缓存中的库存信息
         GoodsVo good = goodsService.getGoodsVoByGoodsId(goods.getId());
         redisService.set(GoodsKeyPrefix.GOODS_STOCK, "" + good.getId(), good.getStockCount());
+        // 5. 库存 > 0 时清除售罄标记（补货或并发误标场景）
+        if (good.getStockCount() > 0) {
+            redisService.delete(SkKeyPrefix.GOODS_SK_OVER, "" + good.getId());
+        }
 
         return order;
     }
@@ -91,7 +102,7 @@ public class SeckillServiceImpl implements SeckillServiceApi {
      *
      * @param userId
      * @param goodsId
-     * @return
+     * @return orderId：成功, -1：秒杀失败, 0：排队中
      */
     public long getSeckillResult(Long userId, long goodsId) {
 
@@ -99,6 +110,11 @@ public class SeckillServiceImpl implements SeckillServiceApi {
         if (order != null) {//秒杀成功
             return order.getOrderId();
         } else {
+            // 消息已消费但无订单（如 reduceStock 失败），直接返回失败
+            boolean isProcessed = redisService.exists(SkKeyPrefix.SK_PROCESSED, "" + userId + "_" + goodsId);
+            if (isProcessed) {
+                return -1;
+            }
             boolean isOver = getGoodsOver(goodsId);
             if (isOver) {
                 return -1;
@@ -106,6 +122,17 @@ public class SeckillServiceImpl implements SeckillServiceApi {
                 return 0;
             }
         }
+    }
+
+    /**
+     * 标记秒杀消息已消费（无论成功与否）
+     *
+     * @param userId
+     * @param goodsId
+     */
+    @Override
+    public void setSeckillProcessed(Long userId, long goodsId) {
+        redisService.set(SkKeyPrefix.SK_PROCESSED, "" + userId + "_" + goodsId, true);
     }
 
     /**

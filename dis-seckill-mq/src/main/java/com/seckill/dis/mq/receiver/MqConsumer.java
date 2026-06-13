@@ -57,17 +57,22 @@ public class MqConsumer {
         GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
         Integer stockCount = goods.getStockCount();
         if (stockCount <= 0) {
+            // 库存不足，标记消息已消费，避免 getSeckillResult 永远返回"排队中"
+            seckillService.setSeckillProcessed(user.getUuid(), goodsId);
             return;
         }
 
         // 判断是否已经秒杀到了（保证秒杀接口幂等性）
         SeckillOrder order = this.getSkOrderByUserIdAndGoodsId(user.getUuid(), goodsId);
         if (order != null) {
+            seckillService.setSeckillProcessed(user.getUuid(), goodsId);
             return;
         }
 
         // 1.减库存 2.写入订单 3.写入秒杀订单
         seckillService.seckill(user, goods);
+        // 标记消息已消费（无论秒杀成功或失败）
+        seckillService.setSeckillProcessed(user.getUuid(), goodsId);
     }
 
     /**

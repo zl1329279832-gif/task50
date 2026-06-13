@@ -35,7 +35,15 @@ public interface SeckillServiceApi {
      *
      * @param userId
      * @param goodsId
-     * @return
+     * @return orderId：成功, -1：秒杀失败, 0：排队中
      */
     long getSeckillResult(Long userId, long goodsId);
+
+    /**
+     * 标记秒杀消息已消费（无论成功与否），防止 getSeckillResult 永远返回"排队中"
+     *
+     * @param userId
+     * @param goodsId
+     */
+    void setSeckillProcessed(Long userId, long goodsId);
 }
