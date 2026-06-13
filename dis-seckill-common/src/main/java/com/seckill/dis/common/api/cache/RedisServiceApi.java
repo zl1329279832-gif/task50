@@ -2,6 +2,9 @@ package com.seckill.dis.common.api.cache;
 
 import com.seckill.dis.common.api.cache.vo.KeyPrefix;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * redis 服务接口
  *
@@ -67,4 +70,38 @@ public interface RedisServiceApi {
      * @return
      */
     boolean delete(KeyPrefix prefix, String key);
+
+    // ── ZSET operations ──
+
+    /** ZADD: 添加成员到有序集合 */
+    boolean zadd(KeyPrefix prefix, String key, double score, String member);
+
+    /** ZREM: 从有序集合中移除成员 */
+    boolean zrem(KeyPrefix prefix, String key, String member);
+
+    /** ZCARD: 获取有序集合的成员数量 */
+    long zcard(KeyPrefix prefix, String key);
+
+    /** ZSCORE: 获取成员的分数（不存在返回null） */
+    Double zscore(KeyPrefix prefix, String key, String member);
+
+    /** ZRANK: 获取成员的排名（0-based，不存在返回null） */
+    Long zrank(KeyPrefix prefix, String key, String member);
+
+    /** ZRANGE: 获取指定范围的成员列表 */
+    List<String> zrange(KeyPrefix prefix, String key, long start, long stop);
+
+    // ── Hash operations ──
+
+    /** HSET: 设置哈希表字段 */
+    boolean hset(KeyPrefix prefix, String key, String field, String value);
+
+    /** HGET: 获取哈希表字段值 */
+    String hget(KeyPrefix prefix, String key, String field);
+
+    /** HDEL: 删除哈希表字段 */
+    boolean hdel(KeyPrefix prefix, String key, String field);
+
+    /** HGETALL: 获取哈希表所有字段和值 */
+    Map<String, String> hgetAll(KeyPrefix prefix, String key);
 }

@@ -26,6 +26,11 @@ public class MQConfig {
     public static final String SK_ROUTING_KEY = "routing.sk";
 
     /**
+     * 候补补库存消息队列名
+     */
+    public static final String WAITLIST_REPLENISH_QUEUE = "waitlist.replenish.queue";
+
+    /**
      * Direct模式 交换机exchange
      * 生成用于秒杀的queue
      *
@@ -34,6 +39,16 @@ public class MQConfig {
     @Bean
     public Queue seckillQueue() {
         return new Queue(SECKILL_QUEUE, true);
+    }
+
+    /**
+     * 生成用于候补转单的queue
+     *
+     * @return
+     */
+    @Bean
+    public Queue waitlistReplenishQueue() {
+        return new Queue(WAITLIST_REPLENISH_QUEUE, true);
     }
 
     /**

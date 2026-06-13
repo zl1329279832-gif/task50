@@ -148,6 +148,11 @@ public class SeckillController implements InitializingBean {
         Long stock = redisService.decr(GoodsKeyPrefix.GOODS_STOCK, "" + goodsId);
         if (stock < 0) {
             localOverMap.put(goodsId, true);// 秒杀结束。标记该商品已经秒杀结束
+            // 检查商品是否允许候补抢购
+            GoodsVo goods = goodsService.getGoodsVoByGoodsId(goodsId);
+            if (goods != null && goods.isAllowWaitlist()) {
+                return Result.error(CodeMsg.SECKILL_OVER_WAITLIST);
+            }
             return Result.error(CodeMsg.SECKILL_OVER);
         }
 

@@ -17,6 +17,8 @@ public class SeckillGoods implements Serializable{
     private Date startDate;
     private Date endDate;
 
+    private Integer allowWaitlist;
+
     public Long getId() {
         return id;
     }
@@ -63,5 +65,13 @@ public class SeckillGoods implements Serializable{
 
     public void setEndDate(Date endDate) {
         this.endDate = endDate;
+    }
+
+    public Integer getAllowWaitlist() {
+        return allowWaitlist;
+    }
+
+    public void setAllowWaitlist(Integer allowWaitlist) {
+        this.allowWaitlist = allowWaitlist;
     }
 }

@@ -126,4 +126,39 @@ CREATE TABLE `order_info` (
   DEFAULT CHARSET = utf8mb4;
 
 
+# ************************************************************************
+# 为 seckill_goods 表添加候补抢购标记
+ALTER TABLE `seckill_goods`
+  ADD COLUMN `allow_waitlist` TINYINT(1) NOT NULL DEFAULT 0
+  COMMENT '是否允许候补抢购: 0-不允许, 1-允许'
+  AFTER `end_date`;
+
+# 默认开启候补
+UPDATE `seckill_goods` SET `allow_waitlist` = 1 WHERE `id` IN (1, 2, 3, 4);
+
+
+# ************************************************************************
+# 秒杀候补抢购队列表
+DROP TABLE IF EXISTS `seckill_waitlist`;
+CREATE TABLE `seckill_waitlist` (
+  `id`          BIGINT(20)   NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id`     BIGINT(20)   NOT NULL               COMMENT '用户ID',
+  `goods_id`    BIGINT(20)   NOT NULL               COMMENT '商品ID',
+  `status`      TINYINT(4)   NOT NULL DEFAULT 0     COMMENT '状态: 0-排队中, 1-已转单, 2-已取消, 3-已过期',
+  `position`    INT(11)      DEFAULT NULL            COMMENT '加入时的快照排位',
+  `order_id`    BIGINT(20)   DEFAULT NULL            COMMENT '转单后的订单ID',
+  `create_date` DATETIME     NOT NULL                COMMENT '加入时间',
+  `update_date` DATETIME     DEFAULT NULL            COMMENT '最后更新时间',
+  `expire_date` DATETIME     DEFAULT NULL            COMMENT '过期时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `u_wl_uid_gid` (`user_id`, `goods_id`) USING BTREE
+    COMMENT '同用户同商品唯一约束——保证幂等',
+  KEY `idx_gid_status` (`goods_id`, `status`)
+    COMMENT '按商品+状态查询索引'
+)
+  ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COMMENT '秒杀候补抢购队列表';
+
+
 

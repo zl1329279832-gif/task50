@@ -40,4 +40,13 @@ public interface GoodsServiceApi {
      * @param goods
      */
     boolean reduceStock(GoodsVo goods);
+
+    /**
+     * 补充库存
+     *
+     * @param goodsId 商品ID
+     * @param count   补充数量
+     * @return 是否成功
+     */
+    boolean addStock(long goodsId, int count);
 }

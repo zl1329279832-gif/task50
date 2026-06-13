@@ -56,4 +56,10 @@ public class GoodsServiceImpl implements GoodsServiceApi {
         int ret = goodsMapper.reduceStack(seckillGoods);
         return ret > 0;
     }
+
+    @Override
+    public boolean addStock(long goodsId, int count) {
+        int ret = goodsMapper.addStock(goodsId, count);
+        return ret > 0;
+    }
 }

@@ -8,6 +8,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 /**
  * redis服务实现
  *
@@ -178,6 +182,134 @@ public class RedisServiceImpl implements RedisServiceApi {
     private void returnToPool(Jedis jedis) {
         if (jedis != null)
             jedis.close();
+    }
+
+    // ── ZSET operations ──
+
+    @Override
+    public boolean zadd(KeyPrefix prefix, String key, double score, String member) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.zadd(realKey, score, member);
+            return result != null && result > 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public boolean zrem(KeyPrefix prefix, String key, String member) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.zrem(realKey, member);
+            return result != null && result > 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public long zcard(KeyPrefix prefix, String key) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return jedis.zcard(realKey);
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public Double zscore(KeyPrefix prefix, String key, String member) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return jedis.zscore(realKey, member);
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public Long zrank(KeyPrefix prefix, String key, String member) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return jedis.zrank(realKey, member);
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public List<String> zrange(KeyPrefix prefix, String key, long start, long stop) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return new ArrayList<>(jedis.zrange(realKey, start, stop));
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    // ── Hash operations ──
+
+    @Override
+    public boolean hset(KeyPrefix prefix, String key, String field, String value) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.hset(realKey, field, value);
+            return result != null && result >= 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public String hget(KeyPrefix prefix, String key, String field) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return jedis.hget(realKey, field);
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public boolean hdel(KeyPrefix prefix, String key, String field) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            Long result = jedis.hdel(realKey, field);
+            return result != null && result > 0;
+        } finally {
+            returnToPool(jedis);
+        }
+    }
+
+    @Override
+    public Map<String, String> hgetAll(KeyPrefix prefix, String key) {
+        Jedis jedis = null;
+        try {
+            jedis = jedisPool.getResource();
+            String realKey = prefix.getPrefix() + key;
+            return jedis.hgetAll(realKey);
+        } finally {
+            returnToPool(jedis);
+        }
     }
 
 }

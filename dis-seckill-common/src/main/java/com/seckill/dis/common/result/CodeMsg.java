@@ -51,6 +51,16 @@ public class CodeMsg implements Serializable {
     public static CodeMsg REPEATE_SECKILL = new CodeMsg(500501, "不能重复秒杀");
     public static CodeMsg SECKILL_FAIL = new CodeMsg(500502, "秒杀失败");
     public static CodeMsg SECKILL_PARM_ILLEGAL = new CodeMsg(500503, "秒杀请求参数异常：%s");
+    public static CodeMsg SECKILL_OVER_WAITLIST = new CodeMsg(500510, "秒杀已结束，可加入候补抢购队列");
+
+    /**
+     * 候补抢购模块 5006XX
+     */
+    public static CodeMsg WL_GOODS_NOT_ALLOW = new CodeMsg(500600, "该商品不支持候补抢购");
+    public static CodeMsg WL_ALREADY_JOINED = new CodeMsg(500601, "已在候补队列中，请勿重复加入");
+    public static CodeMsg WL_NOT_FOUND = new CodeMsg(500602, "候补记录不存在");
+    public static CodeMsg WL_CANCEL_FAIL = new CodeMsg(500603, "取消候补失败");
+    public static CodeMsg WL_JOIN_FAIL = new CodeMsg(500604, "加入候补队列失败，请稍后重试");
 
     /**
      * 构造器定义为private是为了防止controller直接new
